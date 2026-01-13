@@ -242,7 +242,7 @@ Label handling:
 LabelEncoder + one-hot targets (to_categorical)
 Why: prevents false ordinal relationships between class indices and matches softmax training.
 
-Model
+Model {
 
 Embedding dim: 100
 
@@ -259,6 +259,7 @@ Loss: categorical_crossentropy
 Early stopping on val_loss (patience=3, restore_best_weights=True)
 
 Training: epochs=10, batch_size=32, with sample weights
+}
 
 Results (DL)
 
@@ -281,8 +282,9 @@ print(report_lstm)
 ML vs DL — What we learned
 Score comparison (test set)
 Approach                           	           Accuracy                             	Weighted F1
-Optimized LR (custom token pattern)	           0.8502                                  	0.8358
+Optimized LR (custom token pattern)	            0.8502                                  	0.8358
 LSTM baseline                                 	0.8345	                                  0.7854
+
 
 Interpretation
 
@@ -297,6 +299,23 @@ limited dataset size for deep semantic generalization,
 sensitivity to hyperparameters.
 
 ---
+Reproducibility
+Install (ML)
+pip install -r requirements.txt
+
+Install (DL)
+TensorFlow on Windows typically requires Python 3.10–3.11.
+pip install -r requirements-dl.txt
+
+Run notebooks
+jupyter notebook notebooks/
+
+
+Recommended order:
+
+01_eda.ipynb
+02_ml_lr.ipynb
+03_dl_lstm.ipynb
 
 ## 📁 Project Structure
 
