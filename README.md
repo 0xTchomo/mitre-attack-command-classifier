@@ -1,127 +1,300 @@
-# MITRE ATT&CK Command Classification using ML & DL
+# MITRE ATT&CK Command Classification using Machine Learning and Deep Learning
 
-> **From raw command-line telemetry to actionable ATT&CK technique classification**
+> From raw command-line telemetry to actionable ATT&CK technique classification
 
-This project explores how **machine learning (ML)** and **deep learning (DL)** models can be used to automatically classify **command-line process titles (`proctitle`)** into **MITRE ATT&CK techniques**, a key challenge in modern **host-based threat detection**.
+This project investigates how **command-line process titles (`proctitle`)** can be automatically classified into **MITRE ATT&CK techniques** using both **Machine Learning (ML)** and **Deep Learning (DL)** approaches.
 
-The work combines **careful data analysis**, **feature engineering tailored to cybersecurity artifacts**, and **model comparison**, bridging the gap between academic experimentation and realistic defensive use cases.
-
----
-
-## 🎯 Project Motivation
-
-Command-line executions are one of the most informative traces of adversarial behavior on a system.  
-However, raw commands are:
-
-- highly variable,
-- context-dependent,
-- noisy (paths, flags, IPs, URLs, credentials),
-- and often reused across multiple attack techniques.
-
-This project investigates:
-
-- **Can we automatically map commands to MITRE ATT&CK techniques?**
-- **How far can classical ML go with the right feature engineering?**
-- **What does deep learning add when modeling command semantics?**
+The focus is not only on model performance, but on **realistic threat modeling**, **data imbalance handling**, and **domain-aware feature engineering**, which are critical for operational cybersecurity systems.
 
 ---
 
-## 🧠 Dataset & Threat Model
+## 🎯 Motivation
+
+Command-line executions are one of the strongest indicators of attacker activity on compromised hosts.  
+They directly expose reconnaissance, lateral movement, persistence, and execution behaviors.
+
+However, command data is challenging:
+- commands are short and noisy,
+- semantics depend on arguments, flags, paths, and IPs,
+- the same command may correspond to different ATT&CK techniques,
+- datasets are naturally imbalanced and frequency-driven.
+
+This project addresses these challenges by combining:
+- careful exploratory analysis,
+- frequency-aware learning,
+- custom tokenization for cyber artifacts,
+- and a comparative study between ML and DL models.
+
+---
+
+## 🧠 Dataset Description
 
 ### Dataset origin
-The dataset comes from the **Casino Limit CTF scenario**, where multiple attacking teams were monitored during a realistic attack simulation.
 
-Each sample represents:
-- a **command-line process title (`proctitle`)**
-- a **MITRE ATT&CK technique label**
-- an associated **execution count** (frequency in the original logs)
+The dataset originates from the **Casino Limit Capture-The-Flag (CTF)** challenge, a realistic offensive security scenario where **multiple attacking teams** operate against a defended infrastructure.
 
-> 📌 The raw dataset is not generated synthetically: it reflects real attacker behavior observed during a competitive offensive scenario.
+During the exercise:
+- attacker activity was fully monitored,
+- all executed commands were collected from system logs,
+- each command was later annotated with **MITRE ATT&CK techniques**.
 
-### Label consolidation
-- Initial labels: **67 ATT&CK techniques**
-- Final labels: **37 techniques**
-- Rare techniques are grouped into a dedicated class:  
-  **`Z999: Other Low-Frequency Techniques`**
+References:
+- Casino Limit challenge: https://casinolimit.inria.fr/challenge.html  
+- Dataset description paper: https://inria.hal.science/hal-05224264  
 
-This avoids extreme class imbalance while preserving semantic meaning.
+---
+
+### Raw data characteristics
+
+Each row in the dataset corresponds to an **observed command execution pattern**, described by:
+
+- `proctitle`  
+  The full command-line string as executed by the attacker.
+
+- `technique`  
+  The original MITRE ATT&CK technique label.
+
+- `technique_grouped`  
+  A consolidated ATT&CK technique label used for modeling.
+
+- `count`  
+  The number of times this exact `(proctitle, technique)` pair appeared in the logs.
+
+Important clarification:
+> The dataset does **not** represent unique commands only.  
+> Execution frequency (`count`) is a first-class signal and is explicitly used during training.
+
+---
+
+### Dataset size and label distribution
+
+- Initial number of ATT&CK techniques: **67**
+- Final number of techniques after consolidation: **37**
+- Number of unique command strings: **~100**
+- Strong class imbalance:
+  - some techniques appear hundreds of times,
+  - others only a few times.
+
+This reflects **real attacker behavior**, where certain actions (discovery, network scanning) are far more frequent than others.
+
+---
+
+### Technique consolidation strategy
+
+To ensure meaningful training and stratified splits, rare techniques are grouped into a dedicated class:
+
+""Z999 – Other Low-Frequency Techniques""
+
+
+This grouping:
+- prevents extreme overfitting,
+- avoids empty classes in validation/test splits,
+- preserves semantic interpretability.
+
+Crucially:
+> Apparent duplicates after grouping are expected and intentional.  
+> They represent **different techniques mapping to the same command**, or **frequency aggregation**, not data leakage.
+
+---
+
+### Dataset availability in this repository
+
+- `data/raw/`  
+  Contains the full processed dataset used in the experiments.
+
+- `data/sample/`  
+  Contains a lightweight CSV illustrating the dataset format, suitable for quick inspection.
+
+- `data/README.md`  
+  Provides additional details on dataset usage and structure.
 
 ---
 
 ## 🧪 Methodology Overview
 
-The project follows a **progressive, reproducible pipeline**:
+The workflow follows three main stages.
+
+---
 
 ### 1️⃣ Exploratory Data Analysis (EDA)
-Notebook: `notebooks/01_eda.ipynb`
 
-Key analyses:
-- distribution of techniques vs grouped techniques,
-- difference between **unique commands** and **real execution frequency** (`count`),
-- explanation of artificial duplicates created by technique grouping,
-- consolidation of `(proctitle, technique_grouped)` pairs by summing counts.
+**Notebook:** `notebooks/01_eda.ipynb`
 
-**Key insight**  
-> A command can legitimately map to multiple attack techniques depending on context — grouping and weighting are not data bugs, but threat modeling decisions.
+Key objectives:
+- inspect dataset structure and types,
+- analyze technique vs grouped-technique distributions,
+- understand the semantic meaning of the `count` column,
+- validate the need for frequency-weighted learning,
+- consolidate `(proctitle, technique_grouped)` pairs by summing counts.
+
+Key insight:
+> In cybersecurity telemetry, frequency is part of the signal, not noise.
 
 ---
 
-### 2️⃣ Machine Learning Baseline (TF-IDF + Logistic Regression)
-Notebook: `notebooks/02_ml_lr.ipynb`
+### 2️⃣ Machine Learning Baseline  
+**TF-IDF + Logistic Regression**
 
-#### Feature representation
-- **TF-IDF** with:
-  - unigrams + bigrams,
-  - maximum vocabulary size = 5,000.
+**Notebook:** `notebooks/02_ml_lr.ipynb`
 
-#### ⚠️ Cybersecurity-aware tokenization (key contribution)
-A **custom token pattern** is introduced to preserve:
-- IP addresses (`10.35.108.10:22`)
-- URLs (`http://malicious.com/payload.sh`)
-- file paths (`/etc/passwd`)
-- command flags (`--color=auto`)
-- environment variables (`$HOME`, `${PATH}`)
+#### Feature engineering
 
-This significantly improves semantic signal compared to default NLP tokenization.
+Commands are vectorized using **TF-IDF (unigrams + bigrams)**.
+
+A **custom token pattern** is introduced to preserve cybersecurity-specific artifacts:
+- IP addresses and ports,
+- URLs,
+- filesystem paths,
+- command flags,
+- environment variables.
+
+This step significantly improves semantic consistency compared to default NLP tokenization.
 
 #### Training strategy
-- Stratified **60 / 20 / 20** split (train / validation / test)
+
+- Stratified split: **60% train / 20% validation / 20% test**
 - **Sample weights = execution count**
-- Weighted metrics (`accuracy_weighted`, `f1_weighted`)
-- Hyperparameter tuning with `GridSearchCV`
+- Weighted evaluation metrics (accuracy, F1-score)
+- Hyperparameter tuning via grid search
 
-**Result**  
-Classical ML, when combined with domain-specific feature engineering, provides a **strong and interpretable baseline**.
+#### Observed results (ML)
+
+- Strong and stable weighted performance.
+- High accuracy on frequent techniques.
+- Confusions mainly between semantically close ATT&CK techniques.
+- High interpretability and low computational cost.
+
+This makes the ML model a **robust baseline** for operational environments.
+Results (ML)
+
+Default LR model (custom TF-IDF, count-weighted)
+
+Accuracy (weighted): 0.7084
+
+F1-score (weighted): 0.7908
+GridSearchCV tuning
+Parameter grid includes:
+
+C ∈ {0.1, 1, 10, 100}
+
+solver ∈ {lbfgs, saga}
+
+class_weight ∈ {None, balanced}
+
+scoring = f1_weighted
+Best CV score:
+
+0.8414 (weighted F1 in CV)
+Best params:
+
+C=10, penalty='l2', solver='lbfgs', class_weight=None, max_iter=1000
+
+Optimized LR model (final)
+
+Accuracy: 0.8502
+
+F1-score (weighted): 0.8358
+
+Classification report (custom pattern):
+
+report_custom = classification_report(
+    y_test_encoded,
+    y_test_pred_final,
+    target_names=label_encoder.classes_,
+    zero_division=0
+)
+print(report_custom)
+
+
+Confusion matrix was generated as well (37×37). For reference:
+
+total predictions = 14,197
+
+correct on diagonal = 12,070
+
+accuracy = 0.8502
 
 ---
 
-### 3️⃣ Deep Learning Baseline (LSTM)
-Notebook: `notebooks/03_dl_lstm.ipynb`
+### 3️⃣ Deep Learning Baseline  
+**Tokenizer + LSTM**
 
-The DL approach models commands as **sequences**, rather than bags of tokens.
+**Notebook:** `notebooks/03_dl_lstm.ipynb`
 
-Pipeline:
-- Tokenization with OOV handling
-- Fixed-length padding
-- Embedding layer
-- LSTM for sequential modeling
-- Softmax output over 37 ATT&CK classes
+Preprocessing
 
-Why LSTM?
-- captures ordering and structure (`command → flags → arguments → paths`)
-- learns implicit patterns missed by linear models
+Tokenizer configuration:
 
-This model serves as a **semantic baseline**, not a replacement for ML.
+num_words=5000
 
----
+oov_token="<unk>"
 
-## 📊 Key Findings
+lower=True
 
-- **Execution frequency matters**: ignoring the `count` column severely misrepresents attacker behavior.
-- **Grouping rare techniques is necessary**, but must be explained and handled carefully.
-- **Custom tokenization is critical** in cybersecurity NLP.
-- **ML models remain highly competitive** when domain knowledge is injected.
-- **DL models add flexibility**, but at higher computational and interpretability cost.
+Sequence preprocessing:
+
+MAX_SEQUENCE_LENGTH = 20
+
+pad_sequences(..., padding='post', truncating='post')
+
+Label handling:
+
+LabelEncoder + one-hot targets (to_categorical)
+Why: prevents false ordinal relationships between class indices and matches softmax training.
+
+Model
+
+Embedding dim: 100
+
+LSTM units: 64
+
+Dropout: 0.5
+
+Output: Dense(NUM_CLASSES, activation='softmax')
+
+Optimizer: adam
+
+Loss: categorical_crossentropy
+
+Early stopping on val_loss (patience=3, restore_best_weights=True)
+
+Training: epochs=10, batch_size=32, with sample weights
+
+Results (DL)
+
+On the test set:
+
+Accuracy: 0.8345
+
+F1-score (weighted): 0.7854
+
+(Optional) classification report:
+
+report_lstm = classification_report(
+    y_test_encoded,
+    y_test_pred_lstm,
+    target_names=label_encoder.classes_,
+    zero_division=0
+)
+print(report_lstm)
+
+ML vs DL — What we learned
+Score comparison (test set)
+Approach                           	           Accuracy                             	Weighted F1
+Optimized LR (custom token pattern)	           0.8502                                  	0.8358
+LSTM baseline                                 	0.8345	                                  0.7854
+
+Interpretation
+
+On this dataset, domain-aware ML is extremely competitive and provides the best overall weighted F1.
+
+LSTM reaches a similar accuracy but a lower weighted F1, likely due to:
+
+heavy imbalance and frequency effects,
+
+limited dataset size for deep semantic generalization,
+
+sensitivity to hyperparameters.
 
 ---
 
@@ -130,36 +303,60 @@ This model serves as a **semantic baseline**, not a replacement for ML.
 mitre-attack-command-classifier/
 │
 ├── notebooks/
-│ ├── 01_eda.ipynb # Dataset exploration and consolidation
-│ ├── 02_ml_lr.ipynb # TF-IDF + Logistic Regression baseline
-│ └── 03_dl_lstm.ipynb # LSTM deep learning model
+│ ├── 01_eda.ipynb
+│ ├── 02_ml_lr.ipynb
+│ └── 03_dl_lstm.ipynb
 │
 ├── command_classifier/
-│ ├── train_lr.py # ML training pipeline
-│ ├── train_lstm.py # DL training pipeline
-│ ├── predict.py # Inference on new commands
-│ ├── common.py # Shared utilities
+│ ├── train_lr.py
+│ ├── train_lstm.py
+│ ├── predict.py
+│ ├── common.py
 │ └── init.py
 │
 ├── data/
-│ ├── raw/ # Full dataset (see data/README.md)
-│ ├── sample/ # Lightweight sample CSV
-│ └── README.md # Dataset access instructions
+│ ├── raw/
+│ ├── sample/
+│ └── README.md
 │
-├── requirements.txt # ML dependencies
-├── requirements-dl.txt # DL dependencies
+├── requirements.txt
+├── requirements-dl.txt
 ├── LICENSE
 └── README.md
 
 
 ---
 
-## 🚀 Getting Started
+## ⚠️ Limitations and Future Work
 
-### Installation
+- Commands analyzed independently (no temporal correlation).
+- No host-level or user-level context.
+- Deep learning constrained by dataset size.
 
-```bash
-git clone https://github.com/0xTchomo/mitre-attack-command-classifier.git
-cd mitre-attack-command-classifier
-pip install -r requirements.txt
+Future work:
+- command sequence modeling,
+- attack chain reconstruction,
+- integration with SIEM / EDR pipelines,
+- human-in-the-loop validation.
+
+---
+
+## 🎓 Academic Context
+
+This project was originally developed as part of an advanced course on **AI-based threat detection**, and was later **refactored and extended** into a standalone portfolio project suitable for professional and research evaluation.
+
+---
+
+## 📜 License
+
+MIT License
+
+---
+
+## 👤 Author
+
+**Thierry Armel Tchomo Kombou**  
+Cybersecurity & AI Engineering  
+Télécom Paris  
+GitHub: https://github.com/0xTchomo
 
