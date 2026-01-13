@@ -1,0 +1,7 @@
+proctitle,technique_grouped,count
+"ss -natp",T1049: System Network Connections Discovery,1
+"./linepeas.sh",T1082: System Information Discovery,1
+"grep -i password /etc/*.conf",T1082: System Information Discovery,1
+"nmap -sC -sV 10.25.141.0/24",T1046: Network Service Discovery,1
+"nmap -sC -sV 10.25.141.0/24 -oN scan.txt",T1046: Network Service Discovery,1
+"mutt -help",T1518: Software Discovery,1
